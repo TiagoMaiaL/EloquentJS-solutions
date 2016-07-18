@@ -11,6 +11,6 @@
  * @param  Number y
  * @return Number
  */
-function min(x, y) {
+var min = function(x, y) {
   return x > y ? y : x;
 }
