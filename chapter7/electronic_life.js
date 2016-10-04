@@ -513,3 +513,48 @@ View.prototype.find = function(char) {
     return null;
   return randomElement(found);
 }
+
+
+/////////////////////////////////////////
+////////////// Solutions ////////////////
+/////////////////////////////////////////
+
+// Artificial stupidity
+
+/**
+ * Smart Plant eater.
+ */
+function SmartPlantEater() {
+  this.energy = 20;
+}
+
+/**
+ * Act method.
+ * The critter checks if there's enough plants, if so,
+ * it rationalizes the resources and always tries
+ * to be close to the plants, not moving.
+ * @param  View view
+ * @return object
+ */
+SmartPlantEater.prototype.act = function(view) {
+  var space = view.find(" ");
+  var plants = view.findAll("*");
+
+  if (plants.length > 4)
+    return {type: "eat", direction: randomElement(plants)};
+  
+  if (plants.length > 2 && this.energy < 30)
+    return {type: "eat", direction: randomElement(plants)};
+
+  if (plants.length >= 1 && this.energy < 20)
+    return {type: "eat", direction: plants[0]};
+
+  if (this.energy > 80 && space)
+    return {type: "reproduce", direction: space};
+
+  if (plants.length == 0 && this.energy > 5)
+    return {type: "move", direction: space};
+}
+
+
+
