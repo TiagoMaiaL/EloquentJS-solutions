@@ -131,6 +131,46 @@ BouncingCritter.prototype.act = function(view) {
   return {type: "move", direction: this.direction};
 }
 
+/**
+ * Gets the direction plus 45 * n degrees.
+ * @param  string direction
+ * @param  int n
+ * @return string
+ */
+function plusDirection(direction, n) {
+  var index = directionNames.indexOf(direction);
+  return directionNames[(index + n + 8) % 8];
+}
+
+/**
+ * WallFollower critter.
+ */
+function WallFollower() {
+  this.direction = "s";
+}
+
+/**
+ * Critter's act method.
+ * Walks to left of a wall.
+ * @param  View view
+ * @return Action
+ */
+WallFollower.prototype.act = function(view) {
+  var start = this.direction;
+
+  if (view.look(plusDirection(this.direction, -3)) != " ")
+    start = this.direction = plusDirection(this.direction, -2);
+  while (view.look(this.direction)) {
+    this.direction = plusDirection(this.direction, 1);
+    if (this.direction == start)
+      break;
+  }
+
+  return {
+    type: "move",
+    direction: this.direction
+  }
+}
 
 // WORLD ELEMENTS
 
@@ -166,6 +206,61 @@ function charFromElement = function(element) {
  * Wall object.
  */
 function Wall() {};
+
+/**
+ * Plant object.
+ */
+function Plant() {
+  this.energy = 3 + Math.random() * 4;
+}
+
+/**
+ * Plant's act method
+ * @param  View view
+ * @return object
+ */
+Plant.prototype.act = function(view) {
+  if (this.energy > 15) {
+    var space = view.find(" ");
+    if (space)
+      return {
+        type: "reproduce",
+        direction: space
+      }
+  }
+
+  if (this.energy < 20)
+    return {type: "grow"}
+}
+
+/**
+ * PlantEater Object.
+ * A critter that eats plants and reproduces itself.
+ */
+function PlantEater() {
+  this.energy = 20;
+}
+
+/**
+ * Act method.
+ * The critter, depending on its energy and plants available,
+ * will reproduce, eat or move.
+ * @param  View view
+ * @return object
+ */
+PlantEater.prototype.act = function(view) {
+  var space = view.find(" ");
+
+  if (this.energy > 60 && space)
+    return {type: "reproduce", direction: space};
+
+  var plant = view.find("*");
+  if (plant)
+    return {type: "eat", direction: plant};
+  if (space)
+    return {type: "move", direction: space};
+}
+
 
 // WORLD
 
@@ -207,12 +302,214 @@ World.prototype.toString = function() {
   return output;
 }
 
+/**
+ * A turn represents an opportunity for each critter to act.
+ * @return {[type]} [description]
+ */
 World.prototype.turn = function() {
   var acted = [];
   this.grid.each(function(critter, vector) {
     if (critter.act && acted.indexOf(critter) == -1) {
-      
+      acted.push(critter);
+      this.letAct(critter, vector);
     }
   });
 }
 
+/**
+ * An opportunity for a critter to act.
+ * @param  Critter critter
+ * @param  Vector vector
+ * @return void
+ */
+World.prototype.letAct = function(critter, vector) {
+  var action = critter.act(new View(this, vector));
+  if (action && action.type == "move") {
+    var destination = this.checkDestination(action, vector);
+    if (destination && this.grid.get(destination) == null) {
+      this.grid.set(vector, null);
+      this.grid.set(destination, critter);
+    }
+  }
+}
+
+/**
+ * Checks the passed destination returned from an action.
+ * @param  Action action
+ * @param  Vector vector
+ * @return Vector
+ */
+World.prototype.checkDestination = function(action, vector) {
+  if (directions.hasOwnProperty(action.direction)) {
+    var destination = vector.plus(directions[action.direction]);
+    if (this.grid.isInside(destination)) {
+      return destination;
+    }
+  }
+}
+
+
+// LIFE LIKE WORLD
+
+/**
+ * Life like world.
+ * This object is an specific version of the
+ * World object, with an overrided letAct,
+ * allowing more than one actions other than
+ * move.
+ * @param array map
+ * @param object legend
+ */
+function LifeLikeWorld(map, legend) {
+  World.call(this, map, legend);
+}
+LifeLikeWorld.prototype = Object.create(null);
+
+/**
+ * Lets a critter act according to the supported
+ * action types.
+ * @param  Object critter
+ * @param  Vector vector
+ * @return void
+ */
+LifeLikeWorld.prototype.letAct = function(critter, vector) {
+  var action = critter.act(new View(this, vector));
+  var handled = action &&
+    action.type in actionTypes &&
+    actionTypes[action.type].call(this, critter, vector, action);
+
+  if (!handled) {
+    critter.energy -= 0.25;
+    if (critter.energy <= 0)
+      this.grid.set(vector, null);
+  }
+}
+
+/**
+ * The supported action types.
+ * @type object
+ */
+var actionTypes = Object.create(null);
+
+/**
+ * Handler for the grow action performed by plants.
+ * @param  object critter
+ * @return boolean
+ */
+actionTypes.grow = function(critter) {
+  critter.energy += 0.5;
+  return true;
+}
+
+/**
+ * Handler for the move action.
+ * @param  Critter critter
+ * @param  Vector vector
+ * @param  object critter
+ * @return boolean
+ */
+actionTypes.move = function(critter, vector, action) {
+  var destination = this.checkDestination(action, vector);
+  if (destination == null ||
+      critter.energy <= 1 ||
+      this.grid.get(destination != null))
+    return false;
+
+  critter.energy -= 1;
+  this.grid.set(vector, null);
+  this.grid.set(destination, critter);
+  return true;
+}
+
+/**
+ * Eat action performed by some creatures.
+ * @param  Critter critter
+ * @param  Vector vector
+ * @param  object action
+ * @return boolean
+ */
+actionTypes.eat = function(critter, vector, action) {
+  var destination = this.checkDestination(action, vector);
+  var atDestination = destination != null && this.grid.get(destination);
+
+  if (!atDestination || atDestination.energy == null)
+    return false;
+
+  critter.energy += atDestination.energy;
+  this.grid.set(destination, null);
+  return true;
+}
+
+/**
+ * Reproduce action performed by some critters.
+ * @param  Critter critter
+ * @param  Vector vector
+ * @param  object action
+ * @return boolean
+ */
+actionTypes.reproduce = function(critter, vector, action) {
+  var baby = elementFromChar(this.legend, critter.originChar);
+  var destination = this.checkDestination(action, vector);
+
+  if (destination == null ||
+      critter.energy <= 2 * baby.energy ||
+      this.grid.get(destination) != null)
+    return false;
+
+  critter.energy -= 2 * baby.energy;
+  this.grid.set(destination, baby);
+  return true;
+}
+
+// VIEW
+
+/**
+ * View object
+ * @param World world
+ * @param Vector vector
+ */
+function View(world, vector) {
+  this.world = world;
+  this.vector = vector;
+}
+
+/**
+ * Looks what exists in the given direction.
+ * @param  string direction
+ * @return string
+ */
+View.prototype.look = function(direction) {
+  var target = this.vector.plus(directions[direction]);
+  if (this.world.grid.isInside(target))
+    return charFromElement(this.world.grid.get(target));
+  else
+    return "#";
+}
+
+/**
+ * Finds all directions in which the
+ * given character can be found.
+ * @param  string char
+ * @return array
+ */
+View.prototype.findAll = function(char) {
+  var found = [];
+  for (var direction in directions) {
+    if (this.look(direction) == char)
+      found.push(direction);
+  }
+  return found;
+}
+
+/**
+ * Finds a direction in which the
+ * given string can be found.
+ * @param  string char
+ * @return string
+ */
+View.prototype.find = function(char) {
+  var found = this.findAll(char);
+  if (found.length == 0)
+    return null;
+  return randomElement(found);
+}
