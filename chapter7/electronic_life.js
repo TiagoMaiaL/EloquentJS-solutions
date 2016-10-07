@@ -556,5 +556,27 @@ SmartPlantEater.prototype.act = function(view) {
     return {type: "move", direction: space};
 }
 
+// Predators
 
+function Tiger() {
+  this.energy = 200;
+}
 
+Tiger.prototype.act = function(view) {
+  var space = view.find(" ");
+  var plants = view.findAll("*");
+  var plantEaters = view.findAll("O");
+
+  if (this.energy < 25 && plantEaters.length == 1)
+    return {type: "eat", direction: plantEaters[0]};
+
+  if (this.energy >= 35 && PlantEaters.length >= 0)
+    return {type: "eat", direction: randomElement(plantEaters)};
+
+  if (this.energy > 4 && space)
+    return {type: "move", direction: space};
+
+  if (this.energy > 400 && space)
+    return {type: "reproduce", direction: space};
+
+}
